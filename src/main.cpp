@@ -31,6 +31,7 @@ void setup()
 	time_t  Clock;
 	TimeElements Clock_TM;
 	uint8_t i;
+	
 	//Apre la porta seriale a 9600 bps
 	Serial.begin(9600);
 	memset(&Configurazione,0,sizeof(Configurazione));
