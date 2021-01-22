@@ -8,12 +8,13 @@
 #include <Arduino.h>
 #include "Time.h"
 #include "DataType.h"
-extern char dbgString[100];
-
+#ifdef SERIAL_DEBUG_CONFIG_WRITER
+extern StringDebug Debug;
+#endif
 void SaveData(SprinklerConfig *Cfg)
 {
-	int  addr=0,PumpID=0;
-	char Low,Hight;
+	int  addr=0;
+	byte Low,Hight,PumpID=0;
 	for(PumpID=0;PumpID<MAX_PUMP;PumpID++)
 	{
 		EEPROM.write(addr++,Cfg->Pump[PumpID].Enabled);
@@ -22,12 +23,13 @@ void SaveData(SprinklerConfig *Cfg)
 		EEPROM.write(addr++,Cfg->Pump[PumpID].Stop_Hour);
 		EEPROM.write(addr++,Cfg->Pump[PumpID].Stop_Minute);
 		EEPROM.write(addr++,Cfg->Pump[PumpID].UseMotor);
+		EEPROM.write(addr++,Cfg->Pump[PumpID].Week);
 	}
 	//Configurazione motore
 	//Estraggo la parte bassa
-	Low=(char)(Cfg->Motor.Pre_Start_Time & 0x00ff);
+	Low=(byte)(Cfg->Motor.Pre_Start_Time & 0x00ff);
 	//Estraggo la parte alta
-	Hight=(char)((Cfg->Motor.Pre_Start_Time & 0xff00)>>8);
+	Hight=(byte)((Cfg->Motor.Pre_Start_Time & 0xff00)>>8);
 	EEPROM.write(addr++,Low);
 	EEPROM.write(addr++,Hight);
 	EEPROM.write(addr++,Cfg->Motor.enabled);
@@ -35,15 +37,16 @@ void SaveData(SprinklerConfig *Cfg)
 	EEPROM.write(addr++,Cfg->Time.hour);
 	EEPROM.write(addr++,Cfg->Time.minute);
 	EEPROM.write(addr++,Cfg->Time.second);
-
-	sprintf(dbgString,"SaveData: Cfg->Motor.Pre_Start_Time %x Low %x Hight %x addr%d",Cfg->Motor.Pre_Start_Time,Low,Hight,addr);
-	Serial.println(dbgString);
+#ifdef SERIAL_DEBUG_CONFIG_WRITER
+	sprintf(Debug,"SaveData: Cfg->Motor.Pre_Start_Time %x Low %x Hight %x addr%d",Cfg->Motor.Pre_Start_Time,Low,Hight,addr);
+	Serial.println(Debug);
+#endif
 }
 
 void LoadData(SprinklerConfig *Cfg)
 {
-	int  addr=0,PumpID=0;
-	char Low,Hight;
+	int  addr=0;
+	byte Low,Hight,PumpID=0;
 
 	for(PumpID=0;PumpID<MAX_PUMP;PumpID++)
 	{
@@ -53,6 +56,7 @@ void LoadData(SprinklerConfig *Cfg)
 		Cfg->Pump[PumpID].Stop_Hour		= EEPROM.read(addr++);
 		Cfg->Pump[PumpID].Stop_Minute	= EEPROM.read(addr++);
 		Cfg->Pump[PumpID].UseMotor		= EEPROM.read(addr++);
+		Cfg->Pump[PumpID].Week			= EEPROM.read(addr++);
 	}
 	Low=EEPROM.read(addr++);
 	Hight=EEPROM.read(addr++);
@@ -63,8 +67,10 @@ void LoadData(SprinklerConfig *Cfg)
 	Cfg->Time.hour			  = EEPROM.read(addr++);
 	Cfg->Time.minute		  = EEPROM.read(addr++);
 	Cfg->Time.second		  = EEPROM.read(addr++);
-	sprintf(dbgString,"LoadData done");
-	Serial.println(dbgString);
+#ifdef SERIAL_DEBUG_CONFIG_WRITER
+	sprintf(Debug,"LoadData done");
+	Serial.println(Debug);
+#endif
  }
 
 

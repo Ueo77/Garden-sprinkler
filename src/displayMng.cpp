@@ -5,10 +5,11 @@
  *      Author: Matteo
  */
 #include <Arduino.h>
+#include <Time.h>
 #include "DisplayMng.h"
 #include "IoMap.h"
 #include "ConfigWriter.h"
-#include <Time.h>
+
 
 #define PAGE_PUMP1	0   /*Pompa numero 1*/
 #define PAGE_PUMP2	1   /*Pompa numero 2*/
@@ -18,7 +19,7 @@
 #define PAGE_PUMP6	5   /*Pompa numero 6*/
 #define PAGE_PUMP7	6   /*Pompa numero 7*/
 #define PAGE_MOTOR	7   /*Gestione motore*/
-#define PAGE_TIME	8   /*Orologio*/
+#define PAGE_TIME 	8   /*Orologio*/
 #define PAGE_RESET	9	/*Pagina di reset*/
 
 #define MAX_PAGES PAGE_RESET
@@ -35,12 +36,9 @@
 #define BOUNCE_DURATION 400
 volatile unsigned long bounceTime=0,bounceTimesSub=0;
 
-char blink;
-static void Sub_Button(void);
-static void Main_Button(void);
-
 /*Variabili interne*/
-LiquidCrystal lcd(PIN_LCD_RS, PIN_LCD_EN, PIN_LCD_D4, PIN_LCD_D5, PIN_LCD_D6, PIN_LCD_D7);
+LiquidCrystal_PCF8574 lcd(0x27); // set the LCD address to 0x27 for a 16 chars and 2 line display 
+
 SprinklerConfig *Config;
 
 
@@ -51,36 +49,40 @@ char Saved=0;
 
 //char lcdString [17];
 StringDisplay lcdString;
-char dbgString[100];
+extern StringDebug Debug;
 /*******************/
 
 /*Funzioni ad uso interno*/
 void increase(int Main, int Sub);
 void ResetPage(void);
-
-void CleanPage(void);
-void WeekPage(PumpProperties * Pump,char Blink,byte Day);
-void PumpPage(PumpProperties * Pump);
 void DayOfWeekDecode(int day, char *DayName);
-void TimePage(CurrentTime * Time);
-void MotorPage(MotorProperties *Motor);
+void CleanPage(void);
+void WeekPage(PumpProperties * Pump,bool Blink,byte Day);
+void PumpPage(PumpProperties * Pump,bool Blink);
+void TimePage(bool Blink);
+void MotorPage(MotorProperties *Motor,bool Blink);
 /************************/
 
 void InitDisplay(SprinklerConfig *Cfg)
 {
 	/* definisco il numero di colonne 16 e righe 2*/
+
+
 	lcd.begin(SCREEN_COL, SCREEN_ROW);
-	/*Faccio una puttanata all'avvio*/
-
-	attachInterrupt(INT_SCROLL_LEFT, Main_Button, RISING);
-	attachInterrupt(INT_SCROLL_DOWN, Sub_Button, RISING);
-
-	CurrentPage=PAGE_TIME;
-	CurrentSubPage=0;
+	
+	/* Definisco il PIN Mode dei pulsanti */
+	pinMode(PIN_SCROLL_LEFT,INPUT);
+	pinMode(PIN_SCROLL_DOWN,INPUT);
+	
+	
 	//Copia interna della configurazione dell'irrigatore
 	Config=Cfg;
+#ifdef SERIAL_DEBUG_DISPLAY
 	Serial.println("Init LCD\n");
-
+#endif
+	CurrentPage=PAGE_TIME;
+	CurrentSubPage=0;
+	lcd.setBacklight(255);
 }
 void CleanPage(void)
 {
@@ -90,60 +92,61 @@ void CleanPage(void)
 	lcd.print("               ");
 }
 
-void WeekPage(PumpProperties * Pump,char Blink,byte Day)
+
+void WeekPage(PumpProperties * Pump,bool Blink,byte Day)
 {
-	char L=0,Ma=0,Me=0,G=0,V=0,S=0,D=0,empty;
+	char L=0,Ma=0,Me=0,G=0,V=0,S=0,D=0,empty,sign;
 	lcd.setCursor(0,0);
-	lcd.print("  L M M G V S D  ");
+	lcd.print("  D L M M G V S  ");
 	lcd.setCursor(0,1);
-	blink  ? empty=' ' : empty='#';
+	Blink  ? empty=' ' : empty='_';
+	Blink  ? sign=' ' : sign='*';
+
 	if( Day == LUNEDI)
-	 	(Pump->Week & MASK_LUNEDI) 		? L ='*': L =empty; 
+	 	(Pump->Week & MASK_LUNEDI) 		? L = sign : L =empty; 
 	else 
-		(Pump->Week & MASK_LUNEDI) 		? L ='*': L =' '; 
+		(Pump->Week & MASK_LUNEDI) 		? L ='*' : L =' '; 
 
 	if( Day == MARTEDI)
-		(Pump->Week & MASK_MARTEDI) 	? Ma='*': Ma=empty;
+		(Pump->Week & MASK_MARTEDI) 	? Ma=sign: Ma=empty;
 	else 
-		Ma = ' '; 
+		(Pump->Week & MASK_MARTEDI) 	? Ma='*' : Ma=' ';
 
 	if( Day == MERCOLEDI)
-		(Pump->Week & MASK_MERCOLEDI)	? Me='*': Me=empty;
+		(Pump->Week & MASK_MERCOLEDI)	? Me=sign: Me=empty;
 	else 
-		Me = ' ';
+		(Pump->Week & MASK_MERCOLEDI)	? Me='*': Me=' ';
 
 	if( Day == GIOVEDI)
-		(Pump->Week & MASK_GIOVEDI) 	? G ='*': G =empty;
+		(Pump->Week & MASK_GIOVEDI) 	? G =sign: G =empty;
 	else 
-		G = ' '; 
+		(Pump->Week & MASK_GIOVEDI) 	? G ='*': G =' ';
 
 	if( Day == VENERDI)
-		(Pump->Week & MASK_VENERDI) 	? V ='*': V =empty;
+		(Pump->Week & MASK_VENERDI) 	? V =sign: V =empty;
 	else 
-		V = ' '; 
+		(Pump->Week & MASK_VENERDI) 	? V ='*': V =' ';
 
 	if( Day == SABATO)
-		(Pump->Week & MASK_SABATO) 		? S ='*': S =empty;		
+		(Pump->Week & MASK_SABATO) 		? S =sign: S =empty;		
 	else 
-		S = ' '; 
+		(Pump->Week & MASK_SABATO) 		? S ='*': S =' ';
 
 	if( Day == DOMENICA)
-		(Pump->Week & MASK_DOMENICA) 	? D ='*': D =empty;
+		(Pump->Week & MASK_DOMENICA) 	? D =sign: D =empty;
 	else 
-		D = ' '; 
+		(Pump->Week & MASK_DOMENICA) 	? D ='*': D =' ';
 
-	sprintf(lcdString,"  %c %c %c %c %c %c %c ",L,Ma,Me,G,V,S,D);
+	sprintf(lcdString,"  %c %c %c %c %c %c %c ",D,L,Ma,Me,G,V,S);
 
 	lcd.print(lcdString);
-	Serial.print("WeekPage = ");
-	Serial.print(Day);
-	Serial.print("Week = ");
-	Serial.print(Pump->Week);
-	Serial.print(lcdString);
-	Serial.print("\n");
-
+#ifdef SERIAL_DEBUG_DISPLAY
+	sprintf(Debug,"WeekDay = %d WeekValue %02x \n lcdString=", Day,Pump->Week);
+	Serial.print(Debug);
+	Serial.print(Debug);
+#endif
 }
-void PumpPage(PumpProperties * Pump)
+void PumpPage(PumpProperties * Pump,bool Blink)
 {
 	char EnableMot = '_';
 	if (CurrentSubPage <=6 )
@@ -172,7 +175,7 @@ void PumpPage(PumpProperties * Pump)
 	}
 	else
 	{
-		if (blink == TRUE)
+		if (Blink == TRUE)
 		{
 			switch (CurrentSubPage)
 			{
@@ -214,7 +217,7 @@ void PumpPage(PumpProperties * Pump)
 			case 11:
 			case 12:
 			case 13:
-				WeekPage(Pump,blink,CurrentSubPage - 5);
+				WeekPage(Pump,Blink,CurrentSubPage - 5);
 				break;
 			}
 		}
@@ -229,15 +232,16 @@ void PumpPage(PumpProperties * Pump)
 			}	
 			else
 			{
-				WeekPage(Pump,blink,CurrentSubPage - 5);
+				WeekPage(Pump,Blink,CurrentSubPage - 5);
 			}
 			
-		blink=!blink;
 	}
 	lcd.print (lcdString);
+#ifdef SERIAL_DEBUG_DISPLAY
 	Serial.print("Motor Enable ");
 	Serial.println(Pump->UseMotor,DEC);
 	Serial.print("\n");
+#endif
 }
 
 void DayOfWeekDecode(int day, char *DayName)
@@ -271,25 +275,30 @@ void DayOfWeekDecode(int day, char *DayName)
 	}			
 }
 
-void TimePage(CurrentTime * Time)
+void TimePage(bool Blink)
 {
 	int WeekDay=0;
 	
 	WeekDay=weekday();
 	DayOfWeekDecode(WeekDay,lcdString);
+	lcd.setCursor(0, 0);
+	sprintf(lcdString,"%s %2.d/%2.d/%4.d ",lcdString,day(),month(),year());
+	lcd.print (lcdString);
+	lcd.setCursor(0, 1);
+	sprintf(lcdString,"      %.2u:%.2u:%.2u  ",hour(),minute(),second());
+	lcd.print (lcdString);
 	
-	if (CurrentSubPage == 0) //In visualizzazzione
+/*
+if (CurrentSubPage == 0) //In visualizzazzione
 	{
 		lcd.setCursor(0, 0);
 		sprintf(lcdString,"%s %2.d/%2.d/%4.d ",lcdString,day(),month(),year());
-	}
-	
-		
+	}		
 	lcd.print(lcdString);
 	
 	if (CurrentSubPage!=0)
 	{
-		if (blink == TRUE)
+		if (Blink == TRUE)
 		{
 			switch (CurrentSubPage)
 			{
@@ -344,7 +353,6 @@ void TimePage(CurrentTime * Time)
 					break;
 			}
 		}
-		blink=!blink;
 	}
 	else
 		{
@@ -352,11 +360,11 @@ void TimePage(CurrentTime * Time)
 			sprintf(lcdString,"      %.2u:%.2u:%.2u  ",hour(),minute(),second());
 		}
 		
-
+	*/
 	lcd.print (lcdString);
 }
 
-void MotorPage(MotorProperties *Motor)
+void MotorPage(MotorProperties *Motor,bool Blink)
 {
 	char EnableMot = '_';
 	lcd.setCursor(0, 0);
@@ -372,7 +380,7 @@ void MotorPage(MotorProperties *Motor)
 		EnableMot = 'x';
 	if (CurrentSubPage!=0)
 	{
-		if (blink == TRUE)
+		if (Blink == TRUE)
 		{
 			switch (CurrentSubPage)
 			{
@@ -391,7 +399,6 @@ void MotorPage(MotorProperties *Motor)
 			sprintf(lcdString,"Antic%.3ds   En:%c", Motor->Pre_Start_Time, EnableMot);
 		}
 
-		blink=!blink;
 	}
 	else
 	{
@@ -419,8 +426,10 @@ void ResetPage(void)
 }
 void Increase(int Main, int Sub)
 {
-	sprintf(dbgString,"Increase: Main %d Sub %d",Main,Sub);
-	Serial.println(dbgString);
+#ifdef SERIAL_DEBUG_DISPLAY
+	sprintf(Debug,"Increase: Main %d Sub %d",Main,Sub);
+	Serial.println(Debug);
+#endif
 	Saved = FALSE;
 	switch (Main)
 	{
@@ -456,20 +465,35 @@ void Increase(int Main, int Sub)
 				case 5:
 					Config->Pump[Main].UseMotor=!Config->Pump[Main].UseMotor;
 					break;
-				case 6:	
-					Config->Pump[Main].Week  = ((Config->Pump[Main].Week & MASK_LUNEDI)	 ? (Config->Pump[Main].Week & ~MASK_LUNEDI) : (Config->Pump[Main].Week | MASK_LUNEDI) );
-				case 7:	
-					Config->Pump[Main].Week  = ((Config->Pump[Main].Week & MASK_MARTEDI)	 ? (Config->Pump[Main].Week & ~MASK_MARTEDI) : (Config->Pump[Main].Week | MASK_MARTEDI) );
-				case 8:	
-					Config->Pump[Main].Week  = ((Config->Pump[Main].Week & MASK_MERCOLEDI)	 ? (Config->Pump[Main].Week & ~MASK_MERCOLEDI) : (Config->Pump[Main].Week | MASK_MERCOLEDI) );
-				case 9:	
-					Config->Pump[Main].Week  = ((Config->Pump[Main].Week & MASK_GIOVEDI)	 ? (Config->Pump[Main].Week & ~MASK_GIOVEDI) : (Config->Pump[Main].Week | MASK_GIOVEDI) );
-				case 10:	
-					Config->Pump[Main].Week  = ((Config->Pump[Main].Week & MASK_VENERDI)	 ? (Config->Pump[Main].Week & ~MASK_VENERDI) : (Config->Pump[Main].Week | MASK_VENERDI) );
-				case 11:	
-					Config->Pump[Main].Week  = ((Config->Pump[Main].Week & MASK_SABATO)	 ? (Config->Pump[Main].Week & ~MASK_SABATO) : (Config->Pump[Main].Week | MASK_SABATO) );
-				case 12:	
+				case 6:
+					//Config->Pump[Main].Week  = (Config->Pump[Main].Week | MASK_DOMENICA);
 					Config->Pump[Main].Week  = ((Config->Pump[Main].Week & MASK_DOMENICA)	 ? (Config->Pump[Main].Week & ~MASK_DOMENICA) : (Config->Pump[Main].Week | MASK_DOMENICA) );
+					break;
+				case 7:	
+					//Config->Pump[Main].Week  = (Config->Pump[Main].Week | MASK_LUNEDI);
+					Config->Pump[Main].Week  = ((Config->Pump[Main].Week & MASK_LUNEDI)		 ? (Config->Pump[Main].Week & ~MASK_LUNEDI) : (Config->Pump[Main].Week | MASK_LUNEDI) );
+					break;
+				case 8:	
+					//Config->Pump[Main].Week  = (Config->Pump[Main].Week | MASK_MARTEDI);
+					Config->Pump[Main].Week  = ((Config->Pump[Main].Week & MASK_MARTEDI)	 ? (Config->Pump[Main].Week & ~MASK_MARTEDI) : (Config->Pump[Main].Week | MASK_MARTEDI) );
+					break;
+				case 9:	
+					//Config->Pump[Main].Week  = (Config->Pump[Main].Week | MASK_MERCOLEDI);
+					Config->Pump[Main].Week  = ((Config->Pump[Main].Week & MASK_MERCOLEDI)	 ? (Config->Pump[Main].Week & ~MASK_MERCOLEDI) : (Config->Pump[Main].Week | MASK_MERCOLEDI) );
+					break;
+				case 10:	
+					//Config->Pump[Main].Week  = (Config->Pump[Main].Week | MASK_GIOVEDI);
+					Config->Pump[Main].Week  = ((Config->Pump[Main].Week & MASK_GIOVEDI)	 ? (Config->Pump[Main].Week & ~MASK_GIOVEDI) : (Config->Pump[Main].Week | MASK_GIOVEDI) );
+					break;
+				case 11:	
+					//Config->Pump[Main].Week  = (Config->Pump[Main].Week | MASK_VENERDI);
+					Config->Pump[Main].Week  = ((Config->Pump[Main].Week & MASK_VENERDI)	 ? (Config->Pump[Main].Week & ~MASK_VENERDI) : (Config->Pump[Main].Week | MASK_VENERDI) );
+					break;
+				case 12:	
+					//Config->Pump[Main].Week  = (Config->Pump[Main].Week | MASK_SABATO);
+					Config->Pump[Main].Week  = ((Config->Pump[Main].Week & MASK_SABATO)		 ? (Config->Pump[Main].Week & ~MASK_SABATO) : (Config->Pump[Main].Week | MASK_SABATO) );
+					break;
+				
 			}
 
 			break;
@@ -488,8 +512,10 @@ void Increase(int Main, int Sub)
 					break;
 				case 4:
 					Config->Motor.enabled=!Config->Motor.enabled;
-					sprintf(dbgString,"PAGE_MOTOR: Config->Motor.enabled %d",Config->Motor.enabled);
-					Serial.println(dbgString);
+#ifdef SERIAL_DEBUG_DISPLAY
+					sprintf(Debug,"PAGE_MOTOR: Config->Motor.enabled %d",Config->Motor.enabled);
+					Serial.println(Debug);
+#endif
 					break;
 			}
 			//Superati 1000 sec riporto a 0
@@ -519,8 +545,11 @@ void Increase(int Main, int Sub)
 			switch(Sub)
 			{
 				case 1:
-					sprintf(dbgString,"PAGE_RESET: Save data");
-					Serial.println(dbgString);
+
+#ifdef SERIAL_DEBUG_DISPLAY
+					sprintf(Debug,"PAGE_RESET: Save data");
+					Serial.println(Debug);
+#endif
 					SaveData(Config);
 					Saved =TRUE;
 					break;
@@ -534,66 +563,100 @@ void Increase(int Main, int Sub)
 
 void Sub_Button(void )
 {
-	if (abs(millis() - bounceTimesSub) > BOUNCE_DURATION)
-	{
-		bounceTimesSub = millis();  // set whatever bounce time in ms is appropriate
-		//Sono nella root delle pagine e devo l'utente vuole entrare
-		if(CurrentSubPage == 0)
-		{
-			Serial.println("CurrentSubPage == 0");
-			CurrentSubPage=1;
-		}
-		else
-		{
-			Serial.println("CurrentSubPage != 0");
-			Increase(CurrentPage,CurrentSubPage);
-		}
-		sprintf(dbgString,"Sub button: CurrentSubPage %d CurrentPage %d",CurrentSubPage,CurrentPage);
-		Serial.println(dbgString);
-	}
-}
-void Main_Button(void )
-{
+	static int8_t ButtonState,LastButtonState;
 
-	if (abs(millis() - bounceTime) > BOUNCE_DURATION)
+	ButtonState = digitalRead(PIN_SCROLL_LEFT);
+	if( ButtonState != LastButtonState )
 	{
-	    // Your code here to handle new button press ?
-	    bounceTime = millis();  // set whatever bounce time in ms is appropriate
-
-	    //Se non � stato selezionato niente allora prosegui sulle pagine
-	    if(CurrentSubPage==0)
-	    {
-	    	Serial.println("CurrentSubPage=0");
-	    	CurrentPage++;
-	    	if(CurrentPage > MAX_PAGES)
+		
+		if(ButtonState == HIGH) 
+		{
+			if (abs(millis() - bounceTimesSub) > BOUNCE_DURATION)
 			{
-				CurrentPage=0;
-			}
-	    		
-	    }
-	    else
-	    {
-	    	Serial.println("CurrentSubPage!=0");
-	    	CurrentSubPage++;
-	    	if(CurrentSubPage > MaxCurrentSubPage)
-	    	{
-	    		CurrentPage++;
-	    		if(CurrentPage > MAX_PAGES)
+				bounceTimesSub = millis();  // set whatever bounce time in ms is appropriate
+				//Sono nella root delle pagine e devo l'utente vuole entrare
+				if(CurrentSubPage == 0)
 				{
-					CurrentPage=0;
+					Serial.println("CurrentSubPage == 0");
+					CurrentSubPage=1;
 				}
-	    			
-	    		CurrentSubPage=0;
-	    	}
-	    }
-		sprintf(dbgString,"Main button: CurrentSubPage %d CurrentPage %d",CurrentSubPage,CurrentPage);
-		Serial.println(dbgString);
+				else
+				{
+					Serial.println("CurrentSubPage != 0");
+					Increase(CurrentPage,CurrentSubPage);
+				}
+			#ifdef SERIAL_DEBUG_DISPLAY
+				sprintf(Debug,"Sub button: CurrentSubPage %d CurrentPage %d",CurrentSubPage,CurrentPage);
+				Serial.println(Debug);
+			#endif
+			}
+		}
+	#ifdef SERIAL_DEBUG_DISPLAY
+		sprintf(Debug,"Sub Button ButtonState %d LastButtonState %d",ButtonState,LastButtonState);
+		Serial.println(Debug);
+	#endif
+	}
+	LastButtonState = ButtonState;
+}
+
+void Main_Button( void )
+{
+	static int8_t ButtonState,LastButtonState;
+	ButtonState = digitalRead(PIN_SCROLL_DOWN);
+	if(ButtonState != LastButtonState )
+	{
+		
+		if(ButtonState == HIGH) 
+		{
+		
+			if (abs(millis() - bounceTime) > BOUNCE_DURATION)
+			{
+				// Your code here to handle new button press ?
+				bounceTime = millis();  // set whatever bounce time in ms is appropriate
+
+				//Se non � stato selezionato niente allora prosegui sulle pagine
+				if(CurrentSubPage==0)
+				{
+					Serial.println("CurrentSubPage=0");
+					CurrentPage++;
+					if(CurrentPage > MAX_PAGES)
+					{
+						CurrentPage=0;
+					}	
+				}
+				else
+				{
+					Serial.println("CurrentSubPage!=0");
+					CurrentSubPage++;
+					if(CurrentSubPage > MaxCurrentSubPage)
+					{
+						CurrentPage++;
+						if(CurrentPage > MAX_PAGES)
+						{
+							CurrentPage=0;
+						}
+							
+						CurrentSubPage=0;
+					}
+				}
+		#ifdef SERIAL_DEBUG_DISPLAY
+			sprintf(Debug,"Main button: CurrentSubPage %d CurrentPage %d",CurrentSubPage,CurrentPage);
+			Serial.println(Debug);
+		#endif
+			}
+		}
+		
+	#ifdef SERIAL_DEBUG_DISPLAY
+		sprintf(Debug,"Main Button ButtonState %d LastButtonState %d",ButtonState,LastButtonState);
+		Serial.println(Debug);
+	#endif
 	}
 
+	LastButtonState = ButtonState;
 }
 
 
-void ExecDisplay(void)
+void ExecDisplay(bool Blink)
 {
 	// Non ho capito perchè ma queste due righe impediscono il reset della variabile 
 	//sprintf(dbgString,"ExecDisplay: CurrentSubPage %d",CurrentSubPage);
@@ -607,22 +670,26 @@ void ExecDisplay(void)
 		case PAGE_PUMP5:
 		case PAGE_PUMP6:
 		case PAGE_PUMP7:
-			PumpPage(&(Config->Pump[CurrentPage]));
+			PumpPage(&(Config->Pump[CurrentPage]),Blink);
 			MaxCurrentSubPage = 13; //Definisco il numero di sotto pagine del display
 			break;
 		case PAGE_MOTOR:
-			MotorPage(&(Config->Motor));
+			MotorPage(&(Config->Motor),Blink);
 			MaxCurrentSubPage = 4; //Definisco il numero di sotto pagine del display
 			break;
 		case PAGE_TIME:
-			TimePage(&(Config->Time));
-			MaxCurrentSubPage = 7; // Definisco il numero di sotto pagine del display
+			TimePage(Blink);
+			MaxCurrentSubPage = 1; //7 Definisco il numero di sotto pagine del display
 			break;
 		case PAGE_RESET:
 			ResetPage();
 			MaxCurrentSubPage = 0;// Definisco il numero di sotto pagine del display
 			break;
 	}
-	sprintf(dbgString,"ExecDisplay: CurrentSubPage %d CurrentPage %d MaxCurrentSubPage %d",CurrentSubPage,CurrentPage,MaxCurrentSubPage);
-	Serial.println(dbgString);
+/*
+#ifdef SERIAL_DEBUG_DISPLAY
+	sprintf(Debug,"ExecDisplay: CurrentSubPage %d CurrentPage %d MaxCurrentSubPage %d",CurrentSubPage,CurrentPage,MaxCurrentSubPage);
+	Serial.println(Debug);
+#endif
+*/
 }

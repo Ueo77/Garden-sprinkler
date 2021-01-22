@@ -7,33 +7,40 @@
 #ifndef HEADER_IOMAP_H_
 #define HEADER_IOMAP_H_
 
-/*LCD PIN OUT*/
-#define PIN_LCD_RS 13
-#define PIN_LCD_EN 12
-#define PIN_LCD_D4 11
-#define PIN_LCD_D5 10
-#define PIN_LCD_D6 9
-#define PIN_LCD_D7 8
-/*END LCD PIN OUT*/
+
+/*PUMP PIN OUT*/
+#define PIN_PUMP1 2//8
+#define PIN_PUMP2 3//9
+#define PIN_PUMP3 4
+#define PIN_PUMP4 5
+#define PIN_PUMP5 6
+#define PIN_PUMP6 7
+#define PIN_PUMP7 8
+#define PIN_MOTOR 9
+
+/* ETHERNET RESERVED PIN*/
+#define ETH_SS      10
+#define ETH_MOSI    11
+#define ETH_MISO    12
+#define ETH_SCK     13
 
 
 /*BUTTON PIN */
-/*Interrupt definition for button */
-#define INT_SCROLL_DOWN  0 /*Pin 2*/
-#define INT_SCROLL_LEFT  1 /*Pin 3*/
+#define PIN_SCROLL_DOWN  14 //Analog 00
+#define PIN_SCROLL_LEFT  15 //Analog 01
 /*END BUTTON PIN */
 
-/*PUMP PIN OUT*/
+//Free
+//A2
+//A3
 
-#define PIN_PUMP1 14
-#define PIN_PUMP2 15
-#define PIN_PUMP3 16
-#define PIN_PUMP4 17
-#define PIN_PUMP5 7
-#define PIN_PUMP6 6
-#define PIN_PUMP7 5
-#define PIN_MOTOR 4
+/*LCD PIN OUT*/
+#define PIN_LCD_SDA 18//Analog 04
+#define PIN_LCD_SCL 19//Analog 05
+/*END LCD PIN OUT*/
 
 /*END PUMP PIN OUT*/
-
+#define CYCLE_TIME 100
+#define BLINK_TIME 1000
 #endif /* HEADER_IOMAP_H_ */
+
