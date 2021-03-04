@@ -424,6 +424,7 @@ void ResetPage(void)
 		sprintf(lcdString," Salvato!       ");
 	lcd.print (lcdString);
 }
+
 void Increase(int Main, int Sub)
 {
 #ifdef SERIAL_DEBUG_DISPLAY

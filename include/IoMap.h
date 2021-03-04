@@ -30,9 +30,9 @@
 #define PIN_SCROLL_LEFT  15 //Analog 01
 /*END BUTTON PIN */
 
-//Free
-//A2
-//A3
+
+#define RAIN_SENSOR 16//Analog 02
+//Free A3
 
 /*LCD PIN OUT*/
 #define PIN_LCD_SDA 18//Analog 04

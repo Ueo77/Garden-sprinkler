@@ -23,6 +23,7 @@
 #define DELIM " :"
 extern UdpPumpCommand PumpCommand[MAX_PUMP];
 extern bool PumpStarted [MAX_PUMP];
+extern byte IsRained;
 
 void GetPacket(void);
 char packetBuffer[NTP_PACKET_SIZE]={0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -196,13 +197,14 @@ void sendStatusPacket()
       // Initialize values needed to form NTP request
       // (see URL above for details on the packets)
       
-      sprintf(packetBuffer,"%u%u%u%u%u%u%u",  PumpStarted[0],
+      sprintf(packetBuffer,"%u%u%u%u%u%u%u%u",PumpStarted[0],
                                               PumpStarted[1],   
                                               PumpStarted[2],
                                               PumpStarted[3],   
                                               PumpStarted[4],   
                                               PumpStarted[5],   
-                                              PumpStarted[6]);   
+                                              PumpStarted[6],
+                                              IsRained);   
       
       Serial.print(packetBuffer);
       // all NTP fields have been given values, now

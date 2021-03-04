@@ -19,6 +19,8 @@ short NumberOfStartedPump;
 //Identificativo di motore pozzo acceso
 bool MotorOn;
 bool Blink;
+byte IsRained;
+
 uint16_t BlinkTimer=0;
 UdpPumpCommand PumpCommand[MAX_PUMP];
 
@@ -28,7 +30,7 @@ void PumpStart(short int PumpID, SprinklerConfig *Conf);
 void PumpStop(short int PumpID,SprinklerConfig *Conf);
 bool CheckTime (TimeElements PumpTime,TimeElements  Now);
 bool CheckWorkingDay(byte WeekMask, TimeElements  Now);
-void CheckPump(TimeElements *PumpTime,TimeElements *Now, PumpProperties PumpConfig[]);
+void CheckPump(TimeElements *PumpTime,TimeElements *Now, PumpProperties PumpConfig[], byte RainSensor);
 void MotorStop ();
 
 
@@ -53,12 +55,15 @@ void setup()
 	Configurazione.Pump[4].PumpIO=PIN_PUMP5;
 	Configurazione.Pump[5].PumpIO=PIN_PUMP6;
 	Configurazione.Pump[6].PumpIO=PIN_PUMP7;
+	
 	//configuro i pin dei relay come output
 	for (i=0;i<MAX_PUMP;i++)
 	{
 		pinMode(Configurazione.Pump[i].PumpIO,OUTPUT);
 	}
+
 	pinMode(PIN_MOTOR,OUTPUT);
+  pinMode(RAIN_SENSOR,INPUT);
 
 	Clock_TM.Hour=Configurazione.Time.hour;
 	Clock_TM.Minute=Configurazione.Time.minute;
@@ -90,11 +95,11 @@ void loop()
 {
 	TimeElements PumpTime,Now;
 	
-
-
 	Main_Button();
 	Sub_Button();
-	
+
+	IsRained = digitalRead(RAIN_SENSOR);
+
 	if (BlinkTimer < BLINK_TIME)
 	{
 		BlinkTimer+=CYCLE_TIME;
@@ -107,7 +112,7 @@ void loop()
 	
 		breakTime(now(),Now);
 		//Avvio eventuali utenze
-		CheckPump(&PumpTime,&Now,Configurazione.Pump);
+		CheckPump(&PumpTime,&Now,Configurazione.Pump,IsRained);
 
 		ExecDisplay(Blink);
 
@@ -175,7 +180,7 @@ bool CheckWorkingDay(byte WeekMask, TimeElements  Now)
 	return ret;
 }
 
-void CheckPump(TimeElements *PumpTime,TimeElements *Now, PumpProperties PumpConfig[])
+void CheckPump(TimeElements *PumpTime,TimeElements *Now, PumpProperties PumpConfig[],byte RainSensor)
 {
 	byte i;
 
@@ -184,7 +189,7 @@ void CheckPump(TimeElements *PumpTime,TimeElements *Now, PumpProperties PumpConf
 		//Verifico se devo accendere la pompa
 		PumpTime->Hour    = PumpConfig[i].Start_Hour;
 		PumpTime->Minute  = PumpConfig[i].Start_Minute;
-		if ( CheckWorkingDay(PumpConfig[i].Week,*Now) )  
+		if ( CheckWorkingDay(PumpConfig[i].Week,*Now) && !RainSensor )  
 		{
 			//Accendo la pompa se non e' gia' accesa e se e' configurata che si deve accendere
 			if (( CheckTime(*PumpTime, *Now) == TRUE )  && ( PumpStarted[i] != TRUE ) )
@@ -241,7 +246,7 @@ void CheckPump(TimeElements *PumpTime,TimeElements *Now, PumpProperties PumpConf
 		
 		}
 
-		if(PumpCommand[i].TurnOn == -1 )
+		if(PumpCommand[i].TurnOn == -1 || RainSensor)
 		{
 			  PumpCommand[i].TurnOn=0;
 				PumpStop(i,&Configurazione);
